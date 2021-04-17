@@ -61,6 +61,7 @@ void allocate_buffers(size_t count)
 }
 
 // Systems
+#include <stdio.h>
 void gravity(void)
 {
  struct JEL_Query *q;
@@ -95,9 +96,10 @@ void gravity(void)
         }
 
         magnitudes[j * buffer_count + k] = m;
-        angles[j * buffer_count + k] = a;
+        angles[j * buffer_count + k] = a + PI;
         magnitudes[k * buffer_count + j] = m;
         angles[k * buffer_count + j] = a;
+
       }
 
       // Figure out resultant
@@ -129,7 +131,6 @@ void gravity(void)
 
 }
 
-#include <stdio.h>
 void physics(void)
 {
  struct JEL_Query *q;
@@ -145,7 +146,6 @@ void physics(void)
 
     for (JEL_EntityInt j = 0; j < q->tables[i]->num; ++j) {
       if (gravity_on) {
-        printf("Magnitude: %f, Angle: %f\n", physics->magnitude[j], physics->angle[j]);
         physics->x_vel[j] += physics->magnitude[j] * cos(physics->angle[j]);
         physics->y_vel[j] += physics->magnitude[j] * sin(physics->angle[j]);
       }

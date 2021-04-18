@@ -2,6 +2,7 @@
 #include <SDL2/SDL.h>
 #include <stdlib.h>
 #include <math.h>
+#include <stdio.h>
 
 // Game stuff
 #define FPS 60
@@ -29,6 +30,7 @@ JEL_COMPONENT_DEFINE(Physics, float, x_vel, float, y_vel, float, magnitude, floa
 JEL_COMPONENT_CREATE(Physics, float, x_vel, float, y_vel, float, magnitude, float, angle, float, mass);
 
 // Other stuff
+#define MASS_AMPLIFY 100
 // 2D arrays to store the results of individual magnitudes and angles
 size_t buffer_count = 128;
 int    num_points = 0;
@@ -57,11 +59,16 @@ void allocate_buffers(size_t count)
     a_bp += buffer_count;
   }
 
+  free(magnitudes);
+  free(angles);
+
+  magnitudes = new_magnitudes;
+  angles = new_angles;
+
   buffer_count = count;
 }
 
 // Systems
-#include <stdio.h>
 void gravity(void)
 {
  struct JEL_Query *q;
@@ -85,20 +92,15 @@ void gravity(void)
         float m = r == 0 ? 0 : physics->mass[j] * physics->mass[k] / (r * r);
         // The angle is how i points to j
         
-        float a = x_diff == 0 ? PI / 2 : atan(y_diff / x_diff);
-        if (y_diff == 0) {
-          if (x_diff < 0) { // j is to the right of k
-            a = PI;
-          }
-        }
-        else if (y_diff > 0) { // j is above k
-          a += PI;
+        float a = x_diff == 0 ? (y_diff > 0 ? 3 * PI / 2 : PI / 2) : atan(y_diff / x_diff);
+        if (x_diff < 0) {
+          a = PI;
         }
 
         magnitudes[j * buffer_count + k] = m;
-        angles[j * buffer_count + k] = a + PI;
+        angles[j * buffer_count + k] = a ;
         magnitudes[k * buffer_count + j] = m;
-        angles[k * buffer_count + j] = a;
+        angles[k * buffer_count + j] = a + PI;
 
       }
 
@@ -107,6 +109,10 @@ void gravity(void)
       physics->angle[j] = 0;
       
       for (size_t k = 0; k < buffer_count; ++k) {
+        if (magnitudes[j * buffer_count + k] == 0) {
+          continue;
+        }
+
         float x_1 = physics->magnitude[j] * cos(physics->angle[j]);
         float y_1 = physics->magnitude[j] * sin(physics->angle[j]);
 
@@ -146,8 +152,8 @@ void physics(void)
 
     for (JEL_EntityInt j = 0; j < q->tables[i]->num; ++j) {
       if (gravity_on) {
-        physics->x_vel[j] += physics->magnitude[j] * cos(physics->angle[j]);
-        physics->y_vel[j] += physics->magnitude[j] * sin(physics->angle[j]);
+        physics->x_vel[j] += physics->magnitude[j] * cos(physics->angle[j]) / physics->mass[j];
+        physics->y_vel[j] += physics->magnitude[j] * sin(physics->angle[j]) / physics->mass[j];
       }
 
       position->x[j] += physics->x_vel[j];
@@ -172,9 +178,16 @@ void draw_points(void)
     JEL_FRAGMENT_GET(physics, q->tables[i], Physics);
 
     for (JEL_EntityInt j = 0; j < q->tables[i]->num; ++j) {
-      float m_squared = physics->mass[j] * physics->mass[j];
+      // Draw the square
+      float m_squared = pow(physics->mass[j] / MASS_AMPLIFY, 2);
       SDL_Rect r = {position->x[j] - m_squared / 2, position->y[j] - m_squared / 2, m_squared, m_squared};
       SDL_RenderDrawRect(renderer, &r);
+      // Draw the net force
+      if (physics->magnitude[j] == 0) {
+        continue;
+      }
+      int amplify = 1;
+      SDL_RenderDrawLine(renderer, position->x[j], position->y[j], position->x[j] + physics->magnitude[j] * amplify * cos(physics->angle[j]), position->y[j] + physics->magnitude[j] * amplify * sin(physics->angle[j]));
     }
   }
 
@@ -257,7 +270,7 @@ void update(void)
     JEL_ENTITY_SET(point, Physics, y_vel, 0);
     JEL_ENTITY_SET(point, Physics, magnitude, 0);
     JEL_ENTITY_SET(point, Physics, angle, 0);
-    JEL_ENTITY_SET(point, Physics, mass, current_size);
+    JEL_ENTITY_SET(point, Physics, mass, current_size * MASS_AMPLIFY);
   }
 
   if (gravity_on) {
